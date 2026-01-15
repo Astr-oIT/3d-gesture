@@ -1,0 +1,7 @@
+{
+  "name": "Copy of Aether Particles: Gesture Control",
+  "description": "A real-time 3D particle system controlled by AI-powered hand gesture detection using the Gemini Live API.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
