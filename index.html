@@ -7,6 +7,10 @@
     <title>Aether Particles</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/hand-pose-detection"></script>
     <style>
         body {
             margin: 0;
@@ -17,24 +21,9 @@
             display: block;
         }
     </style>
-<script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@19.0.0",
-    "react-dom": "https://esm.sh/react-dom@19.0.0",
-    "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
-    "three": "https://esm.sh/three@0.173.0",
-    "@react-three/fiber": "https://esm.sh/@react-three/fiber@9.0.4?deps=react@19.0.0,three@0.173.0",
-    "@react-three/drei": "https://esm.sh/@react-three/drei@10.0.0?deps=react@19.0.0,three@0.173.0,@react-three/fiber@9.0.4",
-    "@react-three/postprocessing": "https://esm.sh/@react-three/postprocessing@2.16.3?deps=react@19.0.0,three@0.173.0,@react-three/fiber@9.0.4",
-    "@google/genai": "https://esm.sh/@google/genai@1.3.1",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "react/": "https://esm.sh/react@^19.2.3/"
-  }
-}
-</script>
 </head>
 <body>
     <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
 </body>
 </html>

@@ -11,25 +11,114 @@ const App: React.FC = () => {
   const [cameraActive, setCameraActive] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const analyzerRef = useRef<GestureAnalyzer | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
   const startCamera = async () => {
+    // Prevent multiple camera opens
+    if (streamRef.current) {
+      console.log('Stream already exists, skipping');
+      return;
+    }
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      // First, enumerate all available video devices
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = devices.filter(device => device.kind === 'videoinput');
+      
+      console.log('Available video devices:', videoDevices);
+      
+      // Find a local webcam (not a virtual or remote device)
+      let deviceId;
+      for (const device of videoDevices) {
+        const label = device.label.toLowerCase();
+        // Skip virtual cameras, mobile links, etc.
+        if (!label.includes('virtual') && 
+            !label.includes('obs') && 
+            !label.includes('snap') &&
+            !label.includes('phone')) {
+          deviceId = device.deviceId;
+          console.log('Selected camera:', device.label);
+          break;
+        }
+      }
+      
+      const constraints = {
+        video: {
+          deviceId: deviceId ? { exact: deviceId } : undefined,
+          facingMode: 'user',
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }
+      };
+      
+      console.log('Requesting camera access...');
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      console.log('Got camera stream!');
+      streamRef.current = stream;
+      
+      console.log('videoRef.current exists?', !!videoRef.current);
+      
       if (videoRef.current) {
+        console.log('Setting video srcObject...');
         videoRef.current.srcObject = stream;
-        setCameraActive(true);
+        console.log('Video stream set, readyState:', videoRef.current.readyState);
         
-        const analyzer = new GestureAnalyzer((update) => {
-          setGesture(update);
-        });
-        analyzer.start(videoRef.current);
-        analyzerRef.current = analyzer;
+        // Wait for video to be ready before starting analyzer
+        videoRef.current.onloadedmetadata = () => {
+          console.log('Video metadata loaded!');
+          videoRef.current?.play().then(() => {
+            console.log('Video playing!');
+            setCameraActive(true);
+            
+            console.log('Creating GestureAnalyzer...');
+            const analyzer = new GestureAnalyzer((update) => {
+              setGesture(update);
+            });
+            
+            console.log('Starting analyzer...');
+            analyzer.start(videoRef.current!);
+            analyzerRef.current = analyzer;
+            console.log('Analyzer started!');
+          }).catch(err => {
+            console.error('Error playing video:', err);
+          });
+        };
+        
+        console.log('Checking if video already ready...');
+        // Fallback: if video is already ready
+        if (videoRef.current.readyState >= 2) {
+          console.log('Video already ready, starting immediately');
+          videoRef.current.play().then(() => {
+            setCameraActive(true);
+            const analyzer = new GestureAnalyzer((update) => {
+              setGesture(update);
+            });
+            analyzer.start(videoRef.current!);
+            analyzerRef.current = analyzer;
+          });
+        } else {
+          console.log('Waiting for metadata event, readyState is:', videoRef.current.readyState);
+        }
+      } else {
+        console.error('videoRef.current is null!');
       }
     } catch (err) {
       console.error("Camera error:", err);
-      alert("Please allow camera access to use gesture control.");
+      alert("Camera error: " + (err as Error).message + "\n\nMake sure no other app is using the camera.");
     }
   };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (analyzerRef.current) {
+        analyzerRef.current.stop();
+      }
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, []);
 
   const templates = [
     { id: TemplateType.HEART, icon: 'fa-heart', label: 'Heart' },
@@ -92,6 +181,15 @@ const App: React.FC = () => {
                 </div>
               </div>
             )}
+            
+            {/* Hidden video element - always rendered for ref */}
+            <video 
+              ref={videoRef} 
+              autoPlay 
+              playsInline 
+              muted 
+              style={{ display: cameraActive ? 'none' : 'none', position: 'absolute' }}
+            />
           </div>
         </div>
 

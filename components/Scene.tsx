@@ -2,7 +2,6 @@
 import React, { useRef, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Stars } from '@react-three/drei';
-import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { TemplateType, GestureState } from '../types';
 import { generatePositions, PARTICLE_COUNT } from '../constants';
@@ -27,35 +26,30 @@ const Particles: React.FC<ParticleSystemProps> = ({ template, color, gesture }) 
     
     const positions = attr.array as Float32Array;
     
-    // Dynamic scaling based on expansion and tension
-    const baseScale = 1 + (gesture.expansion * 1.5);
-    const pulseSpeed = 2 + (gesture.tension * 4);
-    const pulseFactor = 1 + Math.sin(state.clock.elapsedTime * pulseSpeed) * (0.05 + gesture.tension * 0.15);
+    // Simple zoom: Open hand = zoom in, Closed hand = zoom out
+    const zoomScale = gesture.active ? (0.5 + (gesture.expansion * 3.0)) : 1.0;
 
     for (let i = 0; i < PARTICLE_COUNT; i++) {
       const i3 = i * 3;
       
-      // Target coordinate with scaling applied
-      const tx = targetPositions[i3] * baseScale * pulseFactor;
-      const ty = targetPositions[i3 + 1] * baseScale * pulseFactor;
-      const tz = targetPositions[i3 + 2] * baseScale * pulseFactor;
+      // Apply only zoom scale, no pulse or other effects
+      const tx = targetPositions[i3] * zoomScale;
+      const ty = targetPositions[i3 + 1] * zoomScale;
+      const tz = targetPositions[i3 + 2] * zoomScale;
 
-      // Interpolate towards target positions
-      positions[i3] += (tx - positions[i3]) * 0.15;
-      positions[i3 + 1] += (ty - positions[i3 + 1]) * 0.15;
-      positions[i3 + 2] += (tz - positions[i3 + 2]) * 0.15;
-      
-      // Add some noise based on tension
-      if (gesture.tension > 0.1) {
-        const noise = gesture.tension * 0.3;
-        positions[i3] += (Math.random() - 0.5) * noise;
-        positions[i3+1] += (Math.random() - 0.5) * noise;
-        positions[i3+2] += (Math.random() - 0.5) * noise;
-      }
+      // Smooth interpolation - very slow when returning to rest
+      const lerpSpeed = gesture.active ? 0.08 : 0.02;
+      positions[i3] += (tx - positions[i3]) * lerpSpeed;
+      positions[i3 + 1] += (ty - positions[i3 + 1]) * lerpSpeed;
+      positions[i3 + 2] += (tz - positions[i3 + 2]) * lerpSpeed;
     }
     
     attr.needsUpdate = true;
-    pointsRef.current.rotation.y += delta * (0.1 + gesture.tension * 0.5);
+    
+    // Rotate only when making a strong fist
+    if (gesture.active && gesture.tension > 0.4) {
+      pointsRef.current.rotation.y += delta * (0.8 + gesture.tension * 1.5);
+    }
   });
 
   return (
@@ -101,10 +95,6 @@ const Scene: React.FC<ParticleSystemProps> = (props) => {
         <Particles {...props} />
         
         <OrbitControls enablePan={false} enableZoom={true} />
-        
-        <EffectComposer multisampling={0} disableNormalPass>
-          <Bloom luminanceThreshold={0.2} luminanceSmoothing={0.9} intensity={1.5} />
-        </EffectComposer>
       </Canvas>
     </div>
   );
