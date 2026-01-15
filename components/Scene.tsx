@@ -1,3 +1,4 @@
+/// <reference path="../react-three-fiber.d.ts" />
 
 import React, { useRef, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
@@ -26,8 +27,9 @@ const Particles: React.FC<ParticleSystemProps> = ({ template, color, gesture }) 
     
     const positions = attr.array as Float32Array;
     
-    // Simple zoom: Open hand = zoom in, Closed hand = zoom out
-    const zoomScale = gesture.active ? (0.5 + (gesture.expansion * 3.0)) : 1.0;
+    // Super dramatic zoom: Open hand = MASSIVE zoom, Closed hand = tiny
+    // Range: 0.15x (very small) to 10.0x (super zoom)
+    const zoomScale = gesture.active ? (0.15 + (gesture.expansion * 9.85)) : 1.0;
 
     for (let i = 0; i < PARTICLE_COUNT; i++) {
       const i3 = i * 3;
@@ -46,8 +48,8 @@ const Particles: React.FC<ParticleSystemProps> = ({ template, color, gesture }) 
     
     attr.needsUpdate = true;
     
-    // Rotate only when making a strong fist
-    if (gesture.active && gesture.tension > 0.4) {
+    // Rotate only when making a strong fist (high tension, low expansion)
+    if (gesture.active && gesture.tension > 0.6 && gesture.expansion < 0.4) {
       pointsRef.current.rotation.y += delta * (0.8 + gesture.tension * 1.5);
     }
   });
