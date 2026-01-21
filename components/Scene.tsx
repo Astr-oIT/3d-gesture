@@ -15,9 +15,40 @@ interface ParticleSystemProps {
 
 const Particles: React.FC<ParticleSystemProps> = ({ template, color, gesture }) => {
   const pointsRef = useRef<THREE.Points>(null!);
+  const fireworksTimeRef = useRef<number>(0);
   
-  // Create original positions for interpolation
-  const targetPositions = useMemo(() => generatePositions(template, PARTICLE_COUNT), [template]);
+  // Circle shape generator
+  const circlePositions = useMemo(() => {
+    const circle = new Float32Array(PARTICLE_COUNT * 3);
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      const i3 = i * 3;
+      const angle = (i / PARTICLE_COUNT) * Math.PI * 2;
+      const radius = 8;
+      circle[i3] = Math.cos(angle) * radius;
+      circle[i3 + 1] = Math.sin(angle) * radius;
+      circle[i3 + 2] = Math.sin(angle * 3) * 2; // 3D spiral effect
+    }
+    return circle;
+  }, []);
+  
+  // Create shape positions and scattered positions
+  const shapePositions = useMemo(() => generatePositions(template, PARTICLE_COUNT), [template]);
+  const scatteredPositions = useMemo(() => {
+    // Generate random scattered positions in a large sphere
+    const scattered = new Float32Array(PARTICLE_COUNT * 3);
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      const i3 = i * 3;
+      // Random position in sphere
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.random() * Math.PI;
+      const radius = 20 + Math.random() * 30; // Spread from 20 to 50 units
+      
+      scattered[i3] = radius * Math.sin(phi) * Math.cos(theta);
+      scattered[i3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
+      scattered[i3 + 2] = radius * Math.cos(phi);
+    }
+    return scattered;
+  }, []);
   
   useFrame((state, delta) => {
     if (!pointsRef.current || !pointsRef.current.geometry) return;
@@ -27,20 +58,51 @@ const Particles: React.FC<ParticleSystemProps> = ({ template, color, gesture }) 
     
     const positions = attr.array as Float32Array;
     
-    // Super dramatic zoom: Open hand = MASSIVE zoom, Closed hand = tiny
-    // Range: 0.15x (very small) to 10.0x (super zoom)
-    const zoomScale = gesture.active ? (0.15 + (gesture.expansion * 9.85)) : 1.0;
-
     for (let i = 0; i < PARTICLE_COUNT; i++) {
       const i3 = i * 3;
       
-      // Apply only zoom scale, no pulse or other effects
-      const tx = targetPositions[i3] * zoomScale;
-      const ty = targetPositions[i3 + 1] * zoomScale;
-      const tz = targetPositions[i3 + 2] * zoomScale;
+      let tx, ty, tz;
+      
+      if (gesture.active) {
+        // Hand detected: form shape based on gesture type
+        
+        if (gesture.gestureType === 'fist') {
+          // FIST = Circle shape
+          const zoomScale = 0.5 + (gesture.tension * 2);
+          tx = circlePositions[i3] * zoomScale;
+          ty = circlePositions[i3 + 1] * zoomScale;
+          tz = circlePositions[i3 + 2] * zoomScale;
+        } else if (gesture.gestureType === 'ok') {
+          // OK SIGN = Fireworks explosion effect
+          fireworksTimeRef.current += delta;
+          const explosionRadius = 5 + Math.sin(fireworksTimeRef.current * 3) * 3;
+          const angle = (i / PARTICLE_COUNT) * Math.PI * 2;
+          const heightVariation = Math.sin(i * 0.5 + fireworksTimeRef.current * 2) * 5;
+          
+          tx = Math.cos(angle) * explosionRadius;
+          ty = Math.sin(angle) * explosionRadius + heightVariation;
+          tz = Math.sin(angle * 2) * explosionRadius;
+        } else {
+          // Other gestures: use template shape with zoom
+          const zoomScale = 0.15 + (gesture.expansion * 9.85);
+          tx = shapePositions[i3] * zoomScale;
+          ty = shapePositions[i3 + 1] * zoomScale;
+          tz = shapePositions[i3 + 2] * zoomScale;
+        }
+        
+        // Add hand position offset (scaled for 3D space)
+        tx += gesture.handPosition.x * 15;
+        ty += gesture.handPosition.y * 15;
+        tz += gesture.handPosition.z * 5;
+      } else {
+        // No hand: scatter particles
+        tx = scatteredPositions[i3];
+        ty = scatteredPositions[i3 + 1];
+        tz = scatteredPositions[i3 + 2];
+      }
 
-      // Smooth interpolation - very slow when returning to rest
-      const lerpSpeed = gesture.active ? 0.08 : 0.02;
+      // Smooth interpolation - fast when forming, slow when scattering
+      const lerpSpeed = gesture.active ? 0.12 : 0.03;
       positions[i3] += (tx - positions[i3]) * lerpSpeed;
       positions[i3 + 1] += (ty - positions[i3 + 1]) * lerpSpeed;
       positions[i3 + 2] += (tz - positions[i3 + 2]) * lerpSpeed;
@@ -51,6 +113,9 @@ const Particles: React.FC<ParticleSystemProps> = ({ template, color, gesture }) 
     // Rotate only when making a strong fist (high tension, low expansion)
     if (gesture.active && gesture.tension > 0.6 && gesture.expansion < 0.4) {
       pointsRef.current.rotation.y += delta * (0.8 + gesture.tension * 1.5);
+    } else {
+      // Reset rotation slowly when not rotating
+      pointsRef.current.rotation.y *= 0.95;
     }
   });
 
@@ -60,7 +125,7 @@ const Particles: React.FC<ParticleSystemProps> = ({ template, color, gesture }) 
         <bufferAttribute
           attach="attributes-position"
           count={PARTICLE_COUNT}
-          array={targetPositions.slice()}
+          array={scatteredPositions.slice()}
           itemSize={3}
         />
       </bufferGeometry>

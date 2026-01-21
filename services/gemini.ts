@@ -6,10 +6,12 @@ export class GestureAnalyzer {
   private intervalId: number | null = null;
   private onGestureUpdate: (state: GestureState) => void;
   private videoElement: HTMLVideoElement | null = null;
+  private modelReady: boolean = false;
   
   // Smoothing for stable values
   private lastTension: number = 0;
   private lastExpansion: number = 0;
+  private lastHandPosition: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
 
   constructor(onUpdate: (state: GestureState) => void) {
     this.onGestureUpdate = onUpdate;
@@ -29,6 +31,17 @@ export class GestureAnalyzer {
       // Load the simpler handpose model
       this.detector = await (window as any).handpose.load();
       console.log('Handpose model loaded successfully');
+      this.modelReady = true;
+      
+      // Notify that model is ready
+      this.onGestureUpdate({
+        tension: 0,
+        expansion: 0,
+        active: false,
+        modelReady: true,
+        handPosition: { x: 0, y: 0, z: 0 },
+        gestureType: 'none'
+      });
     } catch (error) {
       console.error('Error creating detector:', error);
       return;
@@ -88,7 +101,10 @@ export class GestureAnalyzer {
       this.onGestureUpdate({
         tension: 0,
         expansion: 0,
-        active: false
+        active: false,
+        modelReady: this.modelReady,
+        handPosition: { x: 0, y: 0, z: 0 },
+        gestureType: 'none'
       });
       
       return;
@@ -105,6 +121,25 @@ export class GestureAnalyzer {
       const ringTip = landmarks[16];
       const pinkyTip = landmarks[20];
       const palmBase = landmarks[0]; // Wrist
+
+      // Calculate hand center position (normalized to -1 to 1 range)
+      // Assuming video is 640x480 or similar, normalize to screen center
+      const handCenterX = (palmBase[0] + middleTip[0]) / 2;
+      const handCenterY = (palmBase[1] + middleTip[1]) / 2;
+      const handCenterZ = (palmBase[2] + middleTip[2]) / 2;
+      
+      // Normalize to -1 to 1 range (assuming video width ~640, height ~480)
+      let normalizedX = (handCenterX - 320) / 320;
+      let normalizedY = -(handCenterY - 240) / 240; // Inverted Y for screen coordinates
+      let normalizedZ = handCenterZ * 2; // Depth
+      
+      // Apply smoothing to hand position
+      const posSmoothing = 0.3;
+      normalizedX = this.lastHandPosition.x + (normalizedX - this.lastHandPosition.x) * posSmoothing;
+      normalizedY = this.lastHandPosition.y + (normalizedY - this.lastHandPosition.y) * posSmoothing;
+      normalizedZ = this.lastHandPosition.z + (normalizedZ - this.lastHandPosition.z) * posSmoothing;
+      
+      this.lastHandPosition = { x: normalizedX, y: normalizedY, z: normalizedZ };
 
       // Calculate hand size for normalization
       const handLength = Math.sqrt(
@@ -189,23 +224,47 @@ export class GestureAnalyzer {
       // Pointing (only index extended)
       const isPointing = indexExtended && !middleExtended && ringClosed;
       
+      // OK sign detection (thumb and index close together forming circle, other fingers extended)
+      const thumbIndexDist = Math.sqrt(
+        Math.pow(thumbTip[0] - indexTip[0], 2) + 
+        Math.pow(thumbTip[1] - indexTip[1], 2)
+      ) / handLength;
+      
+      const middleRingPinkyExtended = middleExtended && 
+        (Math.sqrt(Math.pow(ringTip[0] - palmBase[0], 2) + Math.pow(ringTip[1] - palmBase[1], 2)) / handLength > 1.5);
+      
+      const isOKSign = thumbIndexDist < 0.6 && middleRingPinkyExtended;
+      
       // Determine main gesture
-      if (isPeaceSign) {
+      let specificGesture: 'none' | 'fist' | 'ok' | 'open' | 'peace' | 'point' = 'none';
+      
+      if (isOKSign) {
+        gestureType = '👌 OK SIGN (Fireworks!)';
+        additionalEffect = 'ok';
+        specificGesture = 'ok';
+      } else if (isPeaceSign) {
         gestureType = '✌️ PEACE (Color Shift)';
         additionalEffect = 'peace';
+        specificGesture = 'peace';
       } else if (isPointing) {
         gestureType = '☝️ POINT (Highlight)';
         additionalEffect = 'point';
+        specificGesture = 'point';
       } else if (tension > 0.5) {
-        gestureType = '✊ FIST (Rotate Fast)';
+        gestureType = '✊ FIST (Circle Shape)';
+        specificGesture = 'fist';
       } else if (tension > 0.3) {
-        gestureType = '✊ FIST (Rotate)';
+        gestureType = '✊ FIST (Circle)';
+        specificGesture = 'fist';
       } else if (expansion > 0.6) {
         gestureType = '✋ WIDE OPEN (Zoom MAX)';
+        specificGesture = 'open';
       } else if (expansion > 0.3) {
         gestureType = '✋ OPEN (Zoom In)';
+        specificGesture = 'open';
       } else if (expansion < 0.15 && tension < 0.15) {
         gestureType = '🤏 CLOSED (Zoom Out)';
+        specificGesture = 'open';
       }
       
       console.log('Gesture:', gestureType, '- tension:', tension.toFixed(2), 'expansion:', expansion.toFixed(2));
@@ -213,14 +272,20 @@ export class GestureAnalyzer {
       this.onGestureUpdate({
         tension: tension,
         expansion: expansion,
-        active: true
+        active: true,
+        modelReady: this.modelReady,
+        handPosition: this.lastHandPosition,
+        gestureType: specificGesture
       });
     } catch (error) {
       console.error('Error calculating gesture:', error);
       this.onGestureUpdate({
         tension: 0,
         expansion: 0,
-        active: false
+        active: false,
+        modelReady: this.modelReady,
+        handPosition: { x: 0, y: 0, z: 0 },
+        gestureType: 'none'
       });
     }
   }

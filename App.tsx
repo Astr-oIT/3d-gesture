@@ -7,7 +7,7 @@ import { GestureAnalyzer } from './services/gemini';
 const App: React.FC = () => {
   const [template, setTemplate] = useState<TemplateType>(TemplateType.SATURN);
   const [color, setColor] = useState('#00eaff');
-  const [gesture, setGesture] = useState<GestureState>({ tension: 0, expansion: 0, active: false });
+  const [gesture, setGesture] = useState<GestureState>({ tension: 0, expansion: 0, active: false, modelReady: false, handPosition: { x: 0, y: 0, z: 0 }, gestureType: 'none' });
   const [cameraActive, setCameraActive] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const analyzerRef = useRef<GestureAnalyzer | null>(null);
@@ -167,7 +167,14 @@ const App: React.FC = () => {
               <div className="flex flex-col items-end">
                 <div className="w-32 h-24 rounded-lg border border-white/20 overflow-hidden bg-black shadow-2xl relative">
                   <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover grayscale opacity-60" />
-                  <div className="absolute bottom-1 right-1 text-[8px] bg-red-500 px-1 rounded">LIVE AI</div>
+                  <div className="absolute top-1 left-1 text-[8px] px-1.5 py-0.5 rounded flex items-center gap-1 transition-all" style={{ backgroundColor: gesture.modelReady ? '#10b981' : '#6b7280' }}>
+                    <div className={`w-1 h-1 rounded-full ${gesture.modelReady ? 'bg-white animate-pulse' : 'bg-white/40'}`} />
+                    {gesture.modelReady ? 'TFJS READY' : 'LOADING...'}
+                  </div>
+                  <div className="absolute bottom-1 right-1 text-[8px] px-1.5 py-0.5 rounded flex items-center gap-1 transition-all" style={{ backgroundColor: gesture.active ? '#ef4444' : '#374151' }}>
+                    <div className={`w-1 h-1 rounded-full ${gesture.active ? 'bg-white animate-pulse' : 'bg-white/40'}`} />
+                    {gesture.active ? 'HAND DETECTED' : 'NO HAND'}
+                  </div>
                 </div>
                 <div className="mt-2 text-right">
                   <div className="text-[10px] text-white/40 uppercase">Tension</div>
